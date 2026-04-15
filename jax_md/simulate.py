@@ -1155,6 +1155,60 @@ def nvt_langevin(
   return init_fn, step_fn
 
 
+def nvt_langevin_rot(
+    energy_or_force_fn: Callable[..., Array],
+    shift_fn: ShiftFn,
+    dt: float,
+    kT: float,
+    gamma: float = 0.1,
+    center_velocity: bool = True,
+    **sim_kwargs,
+) -> Simulator:
+    """Simulation in the NVT ensemble that thermostats only rotational DOFs.
+
+    Uses the identical BAOAB Langevin integrator as `nvt_langevin` (Davidchack et al.)
+    but applied exclusively to the angular momentum / quaternion conjugate momentum.
+    Linear (center-of-mass) DOFs are integrated with deterministic velocity Verlet.
+
+    Args:
+      ... (same as nvt_langevin)
+      gamma: Rotational friction coefficient (linear friction is forced to 0).
+    """
+    force_fn = quantity.canonicalize_force(energy_or_force_fn)
+
+    @jit
+    def init_fn(key, R, mass=f32(1.0), **kwargs):
+        _kT = kwargs.pop("kT", kT)
+        key, split = random.split(key)
+        force = force_fn(R, **kwargs)
+        state = NVTLangevinState(R, None, force, mass, key)
+        state = canonicalize_mass(state)
+        return initialize_momenta(state, split, _kT)
+
+    @jit
+    def step_fn(state, **kwargs):
+        _dt = kwargs.pop("dt", dt)
+        _kT = kwargs.pop("kT", kT)
+        _gamma = kwargs.pop("gamma", gamma)
+        dt_2 = _dt / 2
+
+        gamma_struct = rigid_body.RigidBody(
+            center=jnp.zeros((), dtype=f32),
+            orientation=jnp.asarray(_gamma, dtype=f32)
+        )
+
+        # BAOAB splitting (exact same as nvt_langevin)
+        state = momentum_step(state, dt_2)                    # half momentum kick (both linear + rot)
+        state = position_step(state, shift_fn, dt_2, **kwargs)  # half position drift
+        state = stochastic_step(state, _dt, _kT, gamma_struct) # O-step: Langevin ONLY on rotations
+        state = position_step(state, shift_fn, dt_2, **kwargs) # half position drift
+        state = state.set(force=force_fn(state.position, **kwargs))
+        state = momentum_step(state, dt_2)                    # half momentum kick (both linear + rot)
+
+        return state
+
+    return init_fn, step_fn
+
 @dataclasses.dataclass
 class BrownianState:
   """A tuple containing state information for Brownian dynamics.
