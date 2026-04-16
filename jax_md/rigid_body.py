@@ -1012,6 +1012,7 @@ operator for Rigid Body motion. This factorization is compatible with either
 the NVE or NVT ensemble (but is not compatible with NPT).
 """
 
+import jax_md.simulate as simulate
 
 @quantity.count_dof.register
 def _(position: RigidBody) -> int:
