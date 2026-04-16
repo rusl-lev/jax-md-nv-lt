@@ -52,7 +52,7 @@ from jax_md import space
 from jax_md import dataclasses
 from jax_md import partition
 from jax_md import smap
-from jax_md import rigid_body
+import jax_md.rigid_body as rigid_body
 
 static_cast = util.static_cast
 
