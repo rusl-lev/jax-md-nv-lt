@@ -458,55 +458,6 @@ def get_moment_of_inertia_diagonal(I: Array, eps=1e-5):
   return I_diag
 
 
-"""Simulation Single Dispatch Extension Functions.
-
-This code overides the core simulation functions in `simulate.py` to allow
-simulations to work with RigidBody objects. See `simulate.py` for a detailed
-description of the use of single dispatch in simulation functions.
-
-These functions are based on Miller III et al [1], which uses the
-Suzuki-Trotter decomposition to identify a factorization of the Liouville
-operator for Rigid Body motion. This factorization is compatible with either
-the NVE or NVT ensemble (but is not compatible with NPT).
-"""
-
-
-@quantity.count_dof.register
-def _(position: RigidBody) -> int:
-  sizes = tree_map_no_quat(lambda x: x.size, position)
-  return tree_reduce(lambda accum, x: accum + x, sizes, 0)
-
-
-@simulate.initialize_momenta.register(RigidBody)
-def _(state, key: Array, kT: float):
-  R, mass = state.position, state.mass
-  center_key, angular_key = random.split(key)
-
-  P_center = jnp.sqrt(mass.center * kT) * random.normal(
-    center_key, R.center.shape, dtype=R.center.dtype
-  )
-  P_center = P_center - jnp.mean(P_center, axis=0, keepdims=True)
-
-  # A the moment we assume that rigid body objects are either 2d or 3d. At some
-  # point it might be worth expanding this definition to include other kinds of
-  # oriented bodies.
-  if isinstance(R.orientation, Quaternion):
-    scale = jnp.sqrt(mass.orientation * kT)
-    center = R.center
-    P_angular = scale * random.normal(
-      angular_key, center.shape, dtype=center.dtype
-    )
-    P_orientation = angular_momentum_to_conjugate_momentum(
-      R.orientation, P_angular
-    )
-  else:
-    scale = jnp.sqrt(mass.orientation * kT)
-    shape, dtype = R.orientation.shape, R.orientation.dtype
-    P_orientation = scale * random.normal(angular_key, shape, dtype=dtype)
-
-  return state.set(momentum=RigidBody(P_center, P_orientation))
-
-
 class EmptyLeaf:
   pass
 
@@ -1123,3 +1074,50 @@ octohedron = point_union_shape(
   * f32(0.5),
   f32(1.0),
 )
+
+"""Simulation Single Dispatch Extension Functions.
+
+This code overides the core simulation functions in `simulate.py` to allow
+simulations to work with RigidBody objects. See `simulate.py` for a detailed
+description of the use of single dispatch in simulation functions.
+
+These functions are based on Miller III et al [1], which uses the
+Suzuki-Trotter decomposition to identify a factorization of the Liouville
+operator for Rigid Body motion. This factorization is compatible with either
+the NVE or NVT ensemble (but is not compatible with NPT).
+"""
+
+
+@quantity.count_dof.register
+def _(position: RigidBody) -> int:
+  sizes = tree_map_no_quat(lambda x: x.size, position)
+  return tree_reduce(lambda accum, x: accum + x, sizes, 0)
+
+
+def _(state, key: Array, kT: float):
+  R, mass = state.position, state.mass
+  center_key, angular_key = random.split(key)
+
+  P_center = jnp.sqrt(mass.center * kT) * random.normal(
+    center_key, R.center.shape, dtype=R.center.dtype
+  )
+  P_center = P_center - jnp.mean(P_center, axis=0, keepdims=True)
+
+  # A the moment we assume that rigid body objects are either 2d or 3d. At some
+  # point it might be worth expanding this definition to include other kinds of
+  # oriented bodies.
+  if isinstance(R.orientation, Quaternion):
+    scale = jnp.sqrt(mass.orientation * kT)
+    center = R.center
+    P_angular = scale * random.normal(
+      angular_key, center.shape, dtype=center.dtype
+    )
+    P_orientation = angular_momentum_to_conjugate_momentum(
+      R.orientation, P_angular
+    )
+  else:
+    scale = jnp.sqrt(mass.orientation * kT)
+    shape, dtype = R.orientation.shape, R.orientation.dtype
+    P_orientation = scale * random.normal(angular_key, shape, dtype=dtype)
+
+  return state.set(momentum=RigidBody(P_center, P_orientation))
