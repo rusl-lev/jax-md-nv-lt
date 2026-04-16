@@ -565,81 +565,6 @@ def _rigid_body_2d_position_step(state, shift_fn: ShiftFn, dt, **kwargs):
   return merge_center_and_orientation(rest, center, orientation)
 
 
-@simulate.position_step.register(RigidBody)
-def _(state, shift_fn, dt, m_rot=1, **kwargs):
-  if isinstance(state.position.orientation, Quaternion):
-    return _rigid_body_3d_position_step(
-      state, shift_fn, dt, m_rot=m_rot, **kwargs
-    )
-  else:
-    return _rigid_body_2d_position_step(state, shift_fn, dt, **kwargs)
-
-
-@simulate.stochastic_step.register(RigidBody)
-def _(state, dt: float, kT: float, gamma: float):
-  key, center_key, orientation_key = random.split(state.rng, 3)
-
-  rest, center, orientation = split_center_and_orientation(state)
-
-  center = simulate.stochastic_step(
-    center.set(rng=center_key), dt, kT, gamma.center
-  )
-
-  Pi = orientation.momentum.vec
-  I = orientation.mass
-  G = gamma.orientation
-
-  M = 4 / jnp.sum(1 / I, axis=-1)
-  Q = orientation.position.vec
-  P = MOMENTUM_PERMUTATION
-
-  # First evaluate PI term
-  Pi_mean = 0
-  for l in range(3):
-    I_l = I[:, [l], None]
-    M_l = M[:, None, None]
-    PP = P[l](Q)[:, None, :] * P[l](Q)[:, :, None]
-    Pi_mean += jnp.exp(-G * M_l * dt / (4 * I_l)) * PP
-  Pi_mean = jnp.einsum('nij,nj->ni', Pi_mean, Pi)
-
-  # Then evaluate Q term
-  Pi_var = 0
-  for l in range(3):
-    scale = jnp.sqrt(
-      4 * kT * I[:, l] * (1 - jnp.exp(-M * G * dt / (2 * I[:, l])))
-    )
-    Pi_var += (scale[:, None] * P[l](Q)) ** 2
-
-  momentum_dist = simulate.Normal(Pi_mean, Pi_var)
-  new_momentum = Quaternion(momentum_dist.sample(orientation_key))
-  orientation = orientation.set(momentum=new_momentum)
-
-  return merge_center_and_orientation(rest.set(rng=key), center, orientation)
-
-
-@simulate.canonicalize_mass.register(RigidBody)
-def _(state):
-  mass = state.mass
-  if len(mass.center) == 1:
-    return state.set(mass=RigidBody(mass.center[0], mass.orientation))
-  elif len(mass.center) > 1:
-    return state.set(mass=RigidBody(mass.center[:, None], mass.orientation))
-  raise NotImplementedError(
-    'Center of mass must be either a scalar or a vector. Found an array of '
-    f'shape {mass.center.shape}.'
-  )
-
-
-@simulate.kinetic_energy.register(RigidBody)
-def _(state) -> Array:
-  return kinetic_energy(state.position, state.momentum, state.mass)
-
-
-@simulate.temperature.register(RigidBody)
-def _(state) -> Array:
-  return temperature(state.position, state.momentum, state.mass)
-
-
 """Rigid bodies as unions of point-like particles.
 
 All of the preceding code is valid for any rigid body. Now, we provide a set
@@ -1093,7 +1018,7 @@ def _(position: RigidBody) -> int:
   sizes = tree_map_no_quat(lambda x: x.size, position)
   return tree_reduce(lambda accum, x: accum + x, sizes, 0)
 
-
+@simulate.initialize_momenta.register(RigidBody)
 def _(state, key: Array, kT: float):
   R, mass = state.position, state.mass
   center_key, angular_key = random.split(key)
@@ -1121,3 +1046,78 @@ def _(state, key: Array, kT: float):
     P_orientation = scale * random.normal(angular_key, shape, dtype=dtype)
 
   return state.set(momentum=RigidBody(P_center, P_orientation))
+
+
+@simulate.position_step.register(RigidBody)
+def _(state, shift_fn, dt, m_rot=1, **kwargs):
+  if isinstance(state.position.orientation, Quaternion):
+    return _rigid_body_3d_position_step(
+      state, shift_fn, dt, m_rot=m_rot, **kwargs
+    )
+  else:
+    return _rigid_body_2d_position_step(state, shift_fn, dt, **kwargs)
+
+
+@simulate.stochastic_step.register(RigidBody)
+def _(state, dt: float, kT: float, gamma: float):
+  key, center_key, orientation_key = random.split(state.rng, 3)
+
+  rest, center, orientation = split_center_and_orientation(state)
+
+  center = simulate.stochastic_step(
+    center.set(rng=center_key), dt, kT, gamma.center
+  )
+
+  Pi = orientation.momentum.vec
+  I = orientation.mass
+  G = gamma.orientation
+
+  M = 4 / jnp.sum(1 / I, axis=-1)
+  Q = orientation.position.vec
+  P = MOMENTUM_PERMUTATION
+
+  # First evaluate PI term
+  Pi_mean = 0
+  for l in range(3):
+    I_l = I[:, [l], None]
+    M_l = M[:, None, None]
+    PP = P[l](Q)[:, None, :] * P[l](Q)[:, :, None]
+    Pi_mean += jnp.exp(-G * M_l * dt / (4 * I_l)) * PP
+  Pi_mean = jnp.einsum('nij,nj->ni', Pi_mean, Pi)
+
+  # Then evaluate Q term
+  Pi_var = 0
+  for l in range(3):
+    scale = jnp.sqrt(
+      4 * kT * I[:, l] * (1 - jnp.exp(-M * G * dt / (2 * I[:, l])))
+    )
+    Pi_var += (scale[:, None] * P[l](Q)) ** 2
+
+  momentum_dist = simulate.Normal(Pi_mean, Pi_var)
+  new_momentum = Quaternion(momentum_dist.sample(orientation_key))
+  orientation = orientation.set(momentum=new_momentum)
+
+  return merge_center_and_orientation(rest.set(rng=key), center, orientation)
+
+
+@simulate.canonicalize_mass.register(RigidBody)
+def _(state):
+  mass = state.mass
+  if len(mass.center) == 1:
+    return state.set(mass=RigidBody(mass.center[0], mass.orientation))
+  elif len(mass.center) > 1:
+    return state.set(mass=RigidBody(mass.center[:, None], mass.orientation))
+  raise NotImplementedError(
+    'Center of mass must be either a scalar or a vector. Found an array of '
+    f'shape {mass.center.shape}.'
+  )
+
+
+@simulate.kinetic_energy.register(RigidBody)
+def _(state) -> Array:
+  return kinetic_energy(state.position, state.momentum, state.mass)
+
+
+@simulate.temperature.register(RigidBody)
+def _(state) -> Array:
+  return temperature(state.position, state.momentum, state.mass)
