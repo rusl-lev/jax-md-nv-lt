@@ -1198,13 +1198,12 @@ def nvt_langevin_rot(
             orientation=jnp.asarray(_gamma, dtype=f32)
         )
 
-        # BAOAB splitting (exact same as nvt_langevin)
-        state = momentum_step(state, dt_2)                    # half momentum kick (both linear + rot)
-        state = position_step(state, shift_fn, dt_2, **kwargs)  # half position drift
-        state = stochastic_step(state, _dt, _kT, gamma_struct) # O-step: Langevin ONLY on rotations
-        state = position_step(state, shift_fn, dt_2, **kwargs) # half position drift
+        state = momentum_step(state, dt_2)
+        state = position_step(state, shift_fn, dt_2, **kwargs)
+        state = stochastic_step(state, _dt, _kT, gamma_struct)
+        state = position_step(state, shift_fn, dt_2, **kwargs)
         state = state.set(force=force_fn(state.position, **kwargs))
-        state = momentum_step(state, dt_2)                    # half momentum kick (both linear + rot)
+        state = momentum_step(state, dt_2)
 
         return state
 
