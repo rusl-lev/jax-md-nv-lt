@@ -53,6 +53,7 @@ from jax_md import dataclasses
 from jax_md import partition
 from jax_md import smap
 import jax_md.rigid_body as rigid_body
+from jax_md import singe_dispatch_rigid_body_func
 
 static_cast = util.static_cast
 
