@@ -1862,22 +1862,22 @@ def _(state, shift_fn, dt, m_rot=1, **kwargs):
 def _(state, dt: float, kT: float, gamma: Union[float, Array, RigidBody]):
 
   if isinstance(gamma, RigidBody):
-        gamma_center = gamma.center
-        gamma_orientation = gamma.orientation
-    else:
-        gamma_center = gamma
-        gamma_orientation = gamma
+    gamma_center = gamma.center
+    gamma_orientation = gamma.orientation
+  else:
+    gamma_center = gamma
+    gamma_orientation = gamma
 
   
   key, center_key, orientation_key = random.split(state.rng, 3)
   rest, center, orientation = rigid_body.split_center_and_orientation(state)
 
   if jnp.allclose(gamma_center, 0.0):
-        center = center.set(rng=center_key)
-    else:
-        center = stochastic_step(
-            center.set(rng=center_key), dt, kT, gamma_center
-        )
+    center = center.set(rng=center_key)
+  else:
+    center = stochastic_step(
+      center.set(rng=center_key), dt, kT, gamma_center
+    )
 
   Pi = orientation.momentum.vec
   I = orientation.mass
