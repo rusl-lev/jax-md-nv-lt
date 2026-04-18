@@ -1194,14 +1194,14 @@ def nvt_langevin_rot(
         _gamma = kwargs.pop("gamma", gamma)
         dt_2 = _dt / 2
 
-        gamma_struct = rigid_body.RigidBody(
-            center=jnp.zeros((), dtype=f32),
-            orientation=jnp.asarray(_gamma, dtype=f32)
-        )
+        # gamma_struct = rigid_body.RigidBody(
+        #     center=jnp.zeros((), dtype=f32),
+        #     orientation=jnp.asarray(_gamma, dtype=f32)
+        # )
 
         state = momentum_step(state, dt_2)
         state = position_step(state, shift_fn, dt_2, **kwargs)
-        state = stochastic_step(state, _dt, _kT, gamma_struct)
+        state = stochastic_step(state, _dt, _kT, _gamma)
         state = position_step(state, shift_fn, dt_2, **kwargs)
         state = state.set(force=force_fn(state.position, **kwargs))
         state = momentum_step(state, dt_2)
@@ -1860,24 +1860,17 @@ def _(state, shift_fn, dt, m_rot=1, **kwargs):
 
 @stochastic_step.register(RigidBody)
 def _(state, dt: float, kT: float, gamma: Union[float, Array, RigidBody]):
-
+  print(">>> Using RigidBody stochastic_step (rotations only)")
   if isinstance(gamma, RigidBody):
-    gamma_center = gamma.center
-    gamma_orientation = gamma.orientation
+    gamma_rot = gamma.orientation
   else:
-    gamma_center = gamma
-    gamma_orientation = gamma
+    gamma_rot = gamma
 
   
   key, center_key, orientation_key = random.split(state.rng, 3)
   rest, center, orientation = rigid_body.split_center_and_orientation(state)
-
-  if jnp.allclose(gamma_center, 0.0):
-    center = center.set(rng=center_key)
-  else:
-    center = stochastic_step(
-      center.set(rng=center_key), dt, kT, gamma_center
-    )
+  
+  center = center.set(rng=center_key)
 
   Pi = orientation.momentum.vec
   I = orientation.mass
@@ -1885,7 +1878,7 @@ def _(state, dt: float, kT: float, gamma: Union[float, Array, RigidBody]):
 
   M = 4 / jnp.sum(1 / I, axis=-1)
   Q = orientation.position.vec
-  P = MOMENTUM_PERMUTATION
+  P = rigid_body.MOMENTUM_PERMUTATION
 
   # First evaluate PI term
   Pi_mean = 0
