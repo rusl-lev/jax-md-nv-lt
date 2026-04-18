@@ -1,5 +1,6 @@
 from jax_md import simulate, rigid_body, quantity
 from jax.tree_util import tree_map, tree_reduce
+from jax_md.rigid_body import RigidBody
 
 """Simulation Single Dispatch Extension Functions.
 
@@ -45,7 +46,7 @@ def _(state, key: Array, kT: float):
     shape, dtype = R.orientation.shape, R.orientation.dtype
     P_orientation = scale * random.normal(angular_key, shape, dtype=dtype)
 
-  return state.set(momentum=rigid_body.RigidBody(P_center, P_orientation))
+  return state.set(momentum=RigidBody(P_center, P_orientation))
 
 
 @simulate.position_step.register(RigidBody)
@@ -104,9 +105,9 @@ def _(state, dt: float, kT: float, gamma: float):
 def _(state):
   mass = state.mass
   if len(mass.center) == 1:
-    return state.set(mass=rigid_body.RigidBody(mass.center[0], mass.orientation))
+    return state.set(mass=RigidBody(mass.center[0], mass.orientation))
   elif len(mass.center) > 1:
-    return state.set(mass=rigid_body.RigidBody(mass.center[:, None], mass.orientation))
+    return state.set(mass=RigidBody(mass.center[:, None], mass.orientation))
   raise NotImplementedError(
     'Center of mass must be either a scalar or a vector. Found an array of '
     f'shape {mass.center.shape}.'
