@@ -53,7 +53,7 @@ from jax_md import dataclasses
 from jax_md import partition
 from jax_md import smap
 import jax_md.rigid_body as rigid_body
-from jax_md.rigid_body import RigidBody
+from jax_md.rigid_body import RigidBody, Quaternion
 
 static_cast = util.static_cast
 
@@ -1859,14 +1859,25 @@ def _(state, shift_fn, dt, m_rot=1, **kwargs):
 
 
 @stochastic_step.register(RigidBody)
-def _(state, dt: float, kT: float, gamma: float):
-  key, center_key, orientation_key = random.split(state.rng, 3)
+def _(state, dt: float, kT: float, gamma: Union[float, Array, RigidBody]):
 
+  if isinstance(gamma, RigidBody):
+        gamma_center = gamma.center
+        gamma_orientation = gamma.orientation
+    else:
+        gamma_center = gamma
+        gamma_orientation = gamma
+
+  
+  key, center_key, orientation_key = random.split(state.rng, 3)
   rest, center, orientation = rigid_body.split_center_and_orientation(state)
 
-  center = simulate.stochastic_step(
-    center.set(rng=center_key), dt, kT, gamma.center
-  )
+  if jnp.allclose(gamma_center, 0.0):
+        center = center.set(rng=center_key)
+    else:
+        center = stochastic_step(
+            center.set(rng=center_key), dt, kT, gamma_center
+        )
 
   Pi = orientation.momentum.vec
   I = orientation.mass
@@ -1893,8 +1904,8 @@ def _(state, dt: float, kT: float, gamma: float):
     )
     Pi_var += (scale[:, None] * P[l](Q)) ** 2
 
-  momentum_dist = simulate.Normal(Pi_mean, Pi_var)
-  new_momentum = rigid_body.Quaternion(momentum_dist.sample(orientation_key))
+  momentum_dist = Normal(Pi_mean, Pi_var)
+  new_momentum = Quaternion(momentum_dist.sample(orientation_key))
   orientation = orientation.set(momentum=new_momentum)
 
   return rigid_body.merge_center_and_orientation(rest.set(rng=key), center, orientation)
