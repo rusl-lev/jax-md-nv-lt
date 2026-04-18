@@ -1818,7 +1818,7 @@ def _(position: RigidBody) -> int:
   sizes = rigid_body.tree_map_no_quat(lambda x: x.size, position)
   return tree_reduce(lambda accum, x: accum + x, sizes, 0)
 
-@simulate.initialize_momenta.register(RigidBody)
+@initialize_momenta.register(RigidBody)
 def _(state, key: Array, kT: float):
   R, mass = state.position, state.mass
   center_key, angular_key = random.split(key)
@@ -1848,7 +1848,7 @@ def _(state, key: Array, kT: float):
   return state.set(momentum=RigidBody(P_center, P_orientation))
 
 
-@simulate.position_step.register(RigidBody)
+@position_step.register(RigidBody)
 def _(state, shift_fn, dt, m_rot=1, **kwargs):
   if isinstance(state.position.orientation, Quaternion):
     return rigid_body._rigid_body_3d_position_step(
@@ -1858,7 +1858,7 @@ def _(state, shift_fn, dt, m_rot=1, **kwargs):
     return rigid_body._rigid_body_2d_position_step(state, shift_fn, dt, **kwargs)
 
 
-@simulate.stochastic_step.register(RigidBody)
+@stochastic_step.register(RigidBody)
 def _(state, dt: float, kT: float, gamma: float):
   key, center_key, orientation_key = random.split(state.rng, 3)
 
@@ -1900,7 +1900,7 @@ def _(state, dt: float, kT: float, gamma: float):
   return rigid_body.merge_center_and_orientation(rest.set(rng=key), center, orientation)
 
 
-@simulate.canonicalize_mass.register(RigidBody)
+@canonicalize_mass.register(RigidBody)
 def _(state):
   mass = state.mass
   if len(mass.center) == 1:
@@ -1913,11 +1913,11 @@ def _(state):
   )
 
 
-@simulate.kinetic_energy.register(RigidBody)
+@kinetic_energy.register(RigidBody)
 def _(state) -> Array:
   return rigid_body.kinetic_energy(state.position, state.momentum, state.mass)
 
 
-@simulate.temperature.register(RigidBody)
+@temperature.register(RigidBody)
 def _(state) -> Array:
   return rigid_body.temperature(state.position, state.momentum, state.mass)
