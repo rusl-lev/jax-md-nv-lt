@@ -1194,14 +1194,14 @@ def nvt_langevin_rot(
         _gamma = kwargs.pop("gamma", gamma)
         dt_2 = _dt / 2
 
-        # gamma_struct = rigid_body.RigidBody(
-        #     center=jnp.zeros((), dtype=f32),
-        #     orientation=jnp.asarray(_gamma, dtype=f32)
-        # )
+        gamma_struct = rigid_body.RigidBody(
+            center=jnp.zeros((), dtype=f32),
+            orientation=jnp.asarray(_gamma, dtype=f32)
+        )
 
         state = momentum_step(state, dt_2)
         state = position_step(state, shift_fn, dt_2, **kwargs)
-        state = stochastic_step(state, _dt, _kT, _gamma)
+        state = stochastic_step(state, _dt, _kT, gamma_struct)
         state = position_step(state, shift_fn, dt_2, **kwargs)
         state = state.set(force=force_fn(state.position, **kwargs))
         state = momentum_step(state, dt_2)
